@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, url_for, jsonify
+from flask import Flask, render_template, request, url_for
 import os
 import torch
 from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
@@ -6,7 +6,7 @@ from PIL import Image
 from datetime import datetime
 from gtts import gTTS  
 from playsound import playsound  
-from googletrans import Translator  # Using googletrans for translation
+from translate import translate_caption  # Import the translation function
 
 app = Flask(__name__)
 
@@ -46,22 +46,17 @@ def generate_audio(caption):
 
     return url_for("static", filename=f"audio/{filename}")
 
-def translate_caption(text, target_lang):
-    try:
-        translator = Translator()
-        translated_text = translator.translate(text, dest=target_lang).text
-        return translated_text
-    except Exception as e:
-        return f"Translation Error: {str(e)}"
-
 @app.route("/", methods=["GET", "POST"])
 def index():
     caption = ""
     image_url = None  
     audio_url = None  
+    translated_caption = ""
+    selected_language = "en"
 
     if request.method == "POST":
         file = request.files.get("image")
+        selected_language = request.form.get("language", "en")
 
         if file and file.filename:
             image_path = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
@@ -73,19 +68,13 @@ def index():
             if caption:
                 audio_url = generate_audio(caption)
 
-    return render_template("index.html", caption=caption, image_url=image_url, audio_url=audio_url)
+                if selected_language != "en":
+                    translated_caption = translate_caption(caption, selected_language)
 
-@app.route("/translate", methods=["POST"])
-def translate():
-    data = request.get_json()
-    text = data.get("text")
-    lang = data.get("lang")
-
-    if not text or not lang:
-        return jsonify({"error": "Invalid input"}), 400
-
-    translated_text = translate_caption(text, lang)
-    return jsonify({"translated_text": translated_text})
+    return render_template(
+        "index.html", caption=caption, translated_caption=translated_caption, 
+        image_url=image_url, audio_url=audio_url, selected_language=selected_language
+    )
 
 if __name__ == "__main__":
-    app.run(threaded=True, debug=True)  # Debug mode enabled for better error tracking
+    app.run(threaded=True, debug=False)
